@@ -1,0 +1,29 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# AI & LangChain
+langchain==0.1.9
+langchain-community==0.0.24
+langchain-core==0.1.23
+
+# LLM Models
+dashscope==1.13.1
+
+# Vector Database
+qdrant-client==1.7.1
+
+# Redis
+redis==5.0.1
+
+# Utilities
+python-dotenv==1.0.0
+
+# TTS
+edge-tts==6.1.10
+
+# Search
+google-search-results==2.4.2
+
+# Document Processing
+pypdf==4.0.1
+beautifulsoup4==4.12.2
