@@ -36,21 +36,6 @@ class RAGRetriever:
             use_memory=use_memory,
         )
 
-    def add_text(self, text: str, metadata: Optional[dict] = None) -> int:
-        """
-        添加文本到知识库
-
-        Args:
-            text: 文本内容
-            metadata: 元数据
-
-        Returns:
-            添加的文档数量
-        """
-        documents = self.doc_processor.load_text(text, metadata)
-        self.vector_store.add_documents(documents)
-        return len(documents)
-
     def add_pdf(self, pdf_path: str) -> int:
         """
         添加 PDF 文件到知识库
@@ -62,20 +47,6 @@ class RAGRetriever:
             添加的文档数量
         """
         documents = self.doc_processor.load_pdf(pdf_path)
-        self.vector_store.add_documents(documents)
-        return len(documents)
-
-    def add_url(self, url: str) -> int:
-        """
-        从 URL 添加内容到知识库
-
-        Args:
-            url: 网页 URL
-
-        Returns:
-            添加的文档数量
-        """
-        documents = self.doc_processor.load_url(url)
         self.vector_store.add_documents(documents)
         return len(documents)
 

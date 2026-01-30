@@ -1,10 +1,9 @@
 """文档处理模块 - 负责文档加载、分块和向量化"""
-from typing import List, Dict, Optional
+from typing import List
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import (
     TextLoader,
-    PyPDFLoader,
-    WebBaseLoader
+    PyPDFLoader
 )
 from langchain_core.documents import Document
 import os
@@ -27,20 +26,6 @@ class DocumentProcessor:
             length_function=len,
         )
 
-    def load_text(self, text: str, metadata: Optional[Dict] = None) -> List[Document]:
-        """
-        加载纯文本
-
-        Args:
-            text: 文本内容
-            metadata: 元数据
-
-        Returns:
-            文档列表
-        """
-        doc = Document(page_content=text, metadata=metadata or {})
-        return self.text_splitter.split_documents([doc])
-
     def load_pdf(self, pdf_path: str) -> List[Document]:
         """
         加载 PDF 文件
@@ -55,20 +40,6 @@ class DocumentProcessor:
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
         loader = PyPDFLoader(pdf_path)
-        documents = loader.load()
-        return self.text_splitter.split_documents(documents)
-
-    def load_url(self, url: str) -> List[Document]:
-        """
-        从 URL 加载网页内容
-
-        Args:
-            url: 网页 URL
-
-        Returns:
-            文档列表
-        """
-        loader = WebBaseLoader(url)
         documents = loader.load()
         return self.text_splitter.split_documents(documents)
 

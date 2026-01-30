@@ -90,6 +90,27 @@ class SmartAgent:
 
         return is_unknown
 
+    def _generate_search_query(self, query: str, chat_history: list = None) -> str:
+        """
+        基于当前查询和对话历史生成更好的搜索查询
+
+        Args:
+            query: 当前用户查询
+            chat_history: 对话历史
+
+        Returns:
+            优化后的搜索查询
+        """
+        # 如果查询很短（可能是简单回复如"需要"、"是的"等），从历史中提取真实意图
+        if len(query) <= 5 and chat_history:
+            # 从历史中找到最近的用户问题
+            for msg in reversed(chat_history):
+                if hasattr(msg, 'type') and msg.type == 'human' and len(msg.content) > 5:
+                    print(f"[DEBUG] Using previous user query for search: {msg.content}")
+                    return msg.content
+
+        return query
+
     def chat(self, query: str, chat_history: list = None) -> Dict[str, Any]:
         """
         处理用户查询
@@ -159,7 +180,11 @@ class SmartAgent:
             if not has_knowledge and self._check_if_unknown(initial_response) and self.search_tool:
                 print("[INFO] AI doesn't know the answer, using web search")
                 try:
-                    search_context = self.search_tool.get_search_context(query, num_results=3)
+                    # 生成更好的搜索查询
+                    search_query = self._generate_search_query(query, chat_history)
+                    print(f"[DEBUG] Generated search query: {search_query}")
+
+                    search_context = self.search_tool.get_search_context(search_query, num_results=3)
                     if search_context:
                         tool_used = "search"
                         print(f"[INFO] Retrieved search results, length: {len(search_context)}")
@@ -258,7 +283,11 @@ class SmartAgent:
                 yield f"data: {json.dumps({'type': 'status', 'message': '正在搜索相关信息...'})}\n\n"
 
                 try:
-                    search_context = self.search_tool.get_search_context(query, num_results=3)
+                    # 生成更好的搜索查询
+                    search_query = self._generate_search_query(query, chat_history)
+                    print(f"[DEBUG] Generated search query: {search_query}")
+
+                    search_context = self.search_tool.get_search_context(search_query, num_results=3)
                     if search_context:
                         tool_used = "search"
 
