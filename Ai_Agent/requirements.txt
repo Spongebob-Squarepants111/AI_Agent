@@ -7,7 +7,8 @@ langchain-community==0.0.24
 langchain-core==0.1.23
 
 # LLM Models
-dashscope==1.13.1
+openai==1.12.0
+langchain-openai==0.0.5
 
 # Vector Database
 qdrant-client==1.7.1

@@ -1,61 +1,89 @@
-"""SerpAPI 搜索工具 - 用于实时信息检索"""
-from langchain.tools import BaseTool
-from pydantic import Field
-from typing import Type, Any
+"""SerpAPI 搜索工具 - 提供网络搜索功能"""
+from typing import List, Dict, Optional
+from serpapi import GoogleSearch
 import os
-import requests
-from urllib.parse import urlencode
 
 
-class SerpAPITool(BaseTool):
-    name = "serpapi_search"
-    description = "用于搜索实时信息的工具。当你需要获取最新信息、统计数据、新闻或事实核查时使用此工具。输入应为一个具体的问题或搜索查询。"
-    
-    def _run(self, query: str) -> str:
-        """执行 SerpAPI 搜索"""
-        api_key = os.getenv("SERPAPI_KEY")
-        if not api_key:
-            return "错误：未配置 SERPAPI_KEY 环境变量。无法执行搜索。"
-        
+class SearchTool:
+    """SerpAPI 搜索工具"""
+
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        初始化搜索工具
+
+        Args:
+            api_key: SerpAPI API Key，如果不提供则从环境变量读取
+        """
+        self.api_key = api_key or os.getenv("SERPAPI_KEY", "")
+        if not self.api_key:
+            print("[WARNING] SERPAPI_KEY not configured. Search functionality will be unavailable.")
+
+    def search(self, query: str, num_results: int = 5) -> List[Dict]:
+        """
+        执行网络搜索
+
+        Args:
+            query: 搜索查询
+            num_results: 返回结果数量
+
+        Returns:
+            搜索结果列表
+        """
+        if not self.api_key:
+            raise ValueError("SERPAPI_KEY not configured. Please set it in .env file.")
+
         try:
-            # 构建请求参数
             params = {
-                'q': query,
-                'api_key': api_key,
-                'hl': 'zh',
-                'gl': 'CN'
+                "q": query,
+                "api_key": self.api_key,
+                "num": num_results,
+                "engine": "google"
             }
-            
-            # 发送请求到 SerpAPI
-            response = requests.get('https://serpapi.com/search', params=params)
-            response.raise_for_status()
-            
-            # 解析结果
-            data = response.json()
-            
-            # 提取搜索结果
-            if 'organic_results' in data:
-                results = []
-                for i, result in enumerate(data['organic_results'][:3]):  # 取前3个结果
-                    title = result.get('title', '')
-                    snippet = result.get('snippet', '')
-                    link = result.get('link', '')
-                    
-                    results.append(f"{i+1}. {title}\n   {snippet}\n   来源: {link}")
-                
-                return "\n\n".join(results)
-            else:
-                return "未找到相关搜索结果。"
-        
-        except requests.exceptions.RequestException as e:
-            return f"搜索请求失败: {str(e)}"
+
+            search = GoogleSearch(params)
+            results = search.get_dict()
+
+            # 提取有机搜索结果
+            organic_results = results.get("organic_results", [])
+
+            formatted_results = []
+            for result in organic_results[:num_results]:
+                formatted_results.append({
+                    "title": result.get("title", ""),
+                    "link": result.get("link", ""),
+                    "snippet": result.get("snippet", ""),
+                    "position": result.get("position", 0)
+                })
+
+            print(f"[INFO] Found {len(formatted_results)} search results for query: {query}")
+            return formatted_results
+
         except Exception as e:
-            return f"搜索过程中发生错误: {str(e)}"
-    
-    async def _arun(self, query: str) -> str:
-        """异步执行搜索"""
-        return self._run(query)
+            print(f"[ERROR] Search failed: {str(e)}")
+            raise
 
+    def get_search_context(self, query: str, num_results: int = 3) -> str:
+        """
+        获取搜索结果的上下文文本（用于 RAG 增强）
 
-# 工具列表
-search_tools = [SerpAPITool()]
+        Args:
+            query: 搜索查询
+            num_results: 返回结果数量
+
+        Returns:
+            合并的搜索结果文本
+        """
+        results = self.search(query, num_results)
+        if not results:
+            return ""
+
+        context_parts = []
+        for i, result in enumerate(results, 1):
+            context_parts.append(
+                f"[搜索结果 {i}]\n"
+                f"标题: {result['title']}\n"
+                f"链接: {result['link']}\n"
+                f"摘要: {result['snippet']}"
+            )
+
+        return "\n\n".join(context_parts)
