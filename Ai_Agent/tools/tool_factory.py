@@ -20,22 +20,27 @@ def create_rag_tool(rag_retriever) -> Optional[Tool]:
     def search_knowledge(query: str) -> str:
         """从知识库中搜索相关信息"""
         try:
-            # 检查知识库是否有文档
-            info = rag_retriever.get_collection_info()
-            vectors_count = info.get("vectors_count", 0)
+            print(f"[DEBUG] Searching knowledge base for: {query}")
 
-            if vectors_count == 0:
-                return "知识库为空，没有可搜索的文档。"
-
-            # 搜索相关文档
+            # 直接尝试搜索
             context = rag_retriever.get_context(query, k=3)
 
-            if not context:
-                return "未找到相关文档。"
+            if not context or context.strip() == "":
+                # 搜索没有结果，检查是否真的没有文档
+                has_docs = rag_retriever.has_documents()
 
+                if not has_docs:
+                    return "知识库为空，没有可搜索的文档。请先上传文档。"
+                else:
+                    return "未找到与查询相关的文档。知识库中有文档，但没有匹配您查询的内容。请尝试用不同的关键词搜索。"
+
+            print(f"[DEBUG] Found context, length: {len(context)}")
             return context
 
         except Exception as e:
+            print(f"[ERROR] Knowledge search error: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return f"搜索知识库时出错: {str(e)}"
 
     return Tool(

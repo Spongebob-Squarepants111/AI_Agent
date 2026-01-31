@@ -56,18 +56,36 @@ class RAGRetriever:
 
     def add_pdf(self, pdf_path: str) -> int:
         """添加 PDF 文件"""
+        print(f"[DEBUG] Adding PDF: {pdf_path}")
         loader = PyPDFLoader(pdf_path)
         documents = loader.load()
+        print(f"[DEBUG] Loaded {len(documents)} pages from PDF")
         chunks = self.text_splitter.split_documents(documents)
+        print(f"[DEBUG] Split into {len(chunks)} chunks")
         self.vectorstore.add_documents(chunks)
+        print(f"[DEBUG] Added {len(chunks)} chunks to vectorstore")
+
+        # 验证添加成功
+        info = self.get_collection_info()
+        print(f"[DEBUG] After adding PDF, collection has {info.get('vectors_count', 0)} vectors")
+
         return len(chunks)
 
     def add_text_file(self, file_path: str) -> int:
         """添加文本文件"""
+        print(f"[DEBUG] Adding text file: {file_path}")
         loader = TextLoader(file_path)
         documents = loader.load()
+        print(f"[DEBUG] Loaded {len(documents)} documents from text file")
         chunks = self.text_splitter.split_documents(documents)
+        print(f"[DEBUG] Split into {len(chunks)} chunks")
         self.vectorstore.add_documents(chunks)
+        print(f"[DEBUG] Added {len(chunks)} chunks to vectorstore")
+
+        # 验证添加成功
+        info = self.get_collection_info()
+        print(f"[DEBUG] After adding text file, collection has {info.get('vectors_count', 0)} vectors")
+
         return len(chunks)
 
     def search(self, query: str, k: int = 3) -> List[Document]:
@@ -76,24 +94,51 @@ class RAGRetriever:
 
     def get_context(self, query: str, k: int = 3) -> str:
         """获取查询的上下文文本"""
-        documents = self.search(query, k=k)
-        if not documents:
+        try:
+            documents = self.search(query, k=k)
+            print(f"[DEBUG] Search returned {len(documents)} documents for query: {query}")
+
+            if not documents:
+                return ""
+
+            context_parts = [f"[文档 {i}]\n{doc.page_content}"
+                            for i, doc in enumerate(documents, 1)]
+            return "\n\n".join(context_parts)
+        except Exception as e:
+            print(f"[ERROR] Search error: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return ""
 
-        context_parts = [f"[文档 {i}]\\n{doc.page_content}"
-                        for i, doc in enumerate(documents, 1)]
-        return "\\n\\n".join(context_parts)
+    def has_documents(self) -> bool:
+        """检查知识库是否有文档（通过实际搜索验证）"""
+        try:
+            # 尝试获取任意文档
+            results = self.vectorstore.similarity_search("test", k=1)
+            has_docs = len(results) > 0
+            print(f"[DEBUG] has_documents check: {has_docs} (found {len(results)} docs)")
+            return has_docs
+        except Exception as e:
+            print(f"[ERROR] has_documents check failed: {str(e)}")
+            return False
 
     def get_collection_info(self) -> dict:
         """获取知识库信息"""
         try:
             collection = self.client.get_collection(self.collection_name)
+            vectors_count = collection.vectors_count if collection.vectors_count is not None else 0
+
+            print(f"[DEBUG] Collection info: {self.collection_name}, vectors_count: {vectors_count}")
+
             return {
                 "collection_name": self.collection_name,
-                "vectors_count": collection.vectors_count or 0
+                "vectors_count": vectors_count,
+                "points_count": collection.points_count if hasattr(collection, 'points_count') else vectors_count
             }
-        except:
+        except Exception as e:
+            print(f"[ERROR] Failed to get collection info: {str(e)}")
             return {
                 "collection_name": self.collection_name,
-                "vectors_count": 0
+                "vectors_count": 0,
+                "points_count": 0
             }
