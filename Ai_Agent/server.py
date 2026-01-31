@@ -11,8 +11,8 @@ from typing import Optional
 from datetime import datetime
 from rag import RAGRetriever
 from tools import SearchTool
-from agent import SmartAgent
-from memory import create_session_memory
+from agent import LangChainAgent
+from memory import create_session_memory, create_langchain_memory, save_conversation_to_redis
 
 # 加载环境变量
 load_dotenv()
@@ -61,10 +61,10 @@ except Exception as e:
 # 智能 Agent
 smart_agent = None
 try:
-    smart_agent = SmartAgent(rag_retriever=rag_retriever, search_tool=search_tool)
-    print("[INFO] Smart Agent initialized successfully")
+    smart_agent = LangChainAgent(rag_retriever=rag_retriever, search_tool=search_tool)
+    print("[INFO] LangChain Agent initialized successfully")
 except Exception as e:
-    print(f"[WARNING] Smart Agent initialization failed: {e}")
+    print(f"[WARNING] LangChain Agent initialization failed: {e}")
 
 # ========================================
 # API 端点
@@ -97,14 +97,16 @@ async def agent_chat_stream(query: str, session_id: Optional[str] = None):
     if not session_id:
         session_id = f"session_{int(datetime.now().timestamp() * 1000)}"
 
-    # 创建记忆实例
-    memory = create_session_memory(session_id)
-    chat_history = memory.get_history_messages()
+    # 创建 Redis 记忆实例
+    redis_memory = create_session_memory(session_id)
+
+    # 创建 LangChain Memory（从 Redis 加载历史）
+    langchain_memory = create_langchain_memory(redis_memory)
 
     async def generate():
         try:
             full_response = ""
-            async for chunk in smart_agent.chat_stream(query, chat_history=chat_history):
+            async for chunk in smart_agent.chat_stream(query, memory=langchain_memory):
                 # 收集完整回答
                 if '"type": "content"' in chunk:
                     data = json.loads(chunk.replace("data: ", "").strip())
@@ -113,10 +115,9 @@ async def agent_chat_stream(query: str, session_id: Optional[str] = None):
 
                 yield chunk
 
-            # 保存对话到记忆
+            # 保存对话到 Redis
             if full_response:
-                memory.add_message("user", query)
-                memory.add_message("assistant", full_response)
+                save_conversation_to_redis(redis_memory, query, full_response)
 
         except Exception as e:
             print(f"[ERROR] Stream error: {str(e)}")
