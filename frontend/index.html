@@ -156,9 +156,10 @@
         },
 
         async streamChat(query) {
-          const url = `${this.apiBaseUrl}/agent_chat_stream?query=${encodeURIComponent(query)}&session_id=${this.sessionId}`
+          // 使用 WebSocket 替代 SSE
+          const wsUrl = this.apiBaseUrl.replace('http://', 'ws://').replace('https://', 'wss://')
+          const ws = new WebSocket(`${wsUrl}/ws/chat`)
 
-          const eventSource = new EventSource(url)
           let assistantMessage = {
             role: 'assistant',
             content: '',
@@ -167,7 +168,15 @@
           this.messages.push(assistantMessage)
 
           return new Promise((resolve, reject) => {
-            eventSource.onmessage = (event) => {
+            ws.onopen = () => {
+              // 连接成功后发送查询
+              ws.send(JSON.stringify({
+                query: query,
+                session_id: this.sessionId
+              }))
+            }
+
+            ws.onmessage = (event) => {
               try {
                 const data = JSON.parse(event.data)
 
@@ -190,12 +199,12 @@
                     break
 
                   case 'done':
-                    eventSource.close()
+                    ws.close()
                     resolve()
                     break
 
                   case 'error':
-                    eventSource.close()
+                    ws.close()
                     reject(new Error(data.message))
                     break
                 }
@@ -204,10 +213,14 @@
               }
             }
 
-            eventSource.onerror = (error) => {
-              console.error('SSE 错误:', error)
-              eventSource.close()
+            ws.onerror = (error) => {
+              console.error('WebSocket 错误:', error)
+              ws.close()
               reject(error)
+            }
+
+            ws.onclose = () => {
+              console.log('WebSocket 连接已关闭')
             }
           })
         },

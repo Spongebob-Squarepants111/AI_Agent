@@ -1,10 +1,8 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 import os
-import json
 import tempfile
 import shutil
 from typing import Optional
@@ -78,62 +76,70 @@ def read_root():
         "docs": "/docs"
     }
 
-@app.get("/agent_chat_stream")
-async def agent_chat_stream(query: str, session_id: Optional[str] = None):
+@app.websocket("/ws/chat")
+async def websocket_chat(websocket: WebSocket):
     """
-    Agent 智能对话接口 - 流式输出
+    WebSocket 智能对话接口 - 流式输出
 
-    - query: 用户问题
-    - session_id: 会话ID（可选）
-
-    返回 SSE (Server-Sent Events) 流
+    消息格式:
+    发送: {"query": "用户问题", "session_id": "会话ID（可选）"}
+    接收: {"type": "content|done|error", "content": "内容", ...}
     """
-    if not smart_agent:
-        return {"error": "Agent 功能未启用"}
+    await websocket.accept()
 
-    print(f"[DEBUG] /agent_chat_stream called with query: {query}")
+    try:
+        while True:
+            # 接收客户端消息
+            data = await websocket.receive_json()
+            query = data.get("query", "")
+            session_id = data.get("session_id")
 
-    # 生成 session_id
-    if not session_id:
-        session_id = f"session_{int(datetime.now().timestamp() * 1000)}"
+            if not query:
+                await websocket.send_json({"type": "error", "message": "查询不能为空"})
+                continue
 
-    # 创建 Redis 记忆实例
-    redis_memory = create_session_memory(session_id)
+            if not smart_agent:
+                await websocket.send_json({"type": "error", "message": "Agent 功能未启用"})
+                continue
 
-    # 创建 LangChain Memory（从 Redis 加载历史）
-    langchain_memory = create_langchain_memory(redis_memory)
+            print(f"[DEBUG] WebSocket chat called with query: {query}")
 
-    async def generate():
-        try:
-            full_response = ""
-            async for chunk in smart_agent.chat_stream(query, memory=langchain_memory):
-                # 收集完整回答
-                if '"type": "content"' in chunk:
-                    data = json.loads(chunk.replace("data: ", "").strip())
-                    if data.get("type") == "content":
-                        full_response += data.get("content", "")
+            # 生成 session_id
+            if not session_id:
+                session_id = f"session_{int(datetime.now().timestamp() * 1000)}"
 
-                yield chunk
+            # 创建 Redis 记忆实例
+            redis_memory = create_session_memory(session_id)
 
-            # 保存对话到 Redis
-            if full_response:
-                save_conversation_to_redis(redis_memory, query, full_response)
+            # 创建 LangChain Memory（从 Redis 加载历史）
+            langchain_memory = create_langchain_memory(redis_memory)
 
-        except Exception as e:
-            print(f"[ERROR] Stream error: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            try:
+                full_response = ""
+                async for chunk_data in smart_agent.chat_stream(query, memory=langchain_memory):
+                    # 收集完整回答
+                    if chunk_data.get("type") == "content":
+                        full_response += chunk_data.get("content", "")
 
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
-    )
+                    # 发送到 WebSocket
+                    await websocket.send_json(chunk_data)
+
+                # 保存对话到 Redis
+                if full_response:
+                    save_conversation_to_redis(redis_memory, query, full_response)
+
+            except Exception as e:
+                print(f"[ERROR] Stream error: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                await websocket.send_json({"type": "error", "message": str(e)})
+
+    except WebSocketDisconnect:
+        print("[INFO] WebSocket disconnected")
+    except Exception as e:
+        print(f"[ERROR] WebSocket error: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @app.post("/knowledge/upload_file")
 async def upload_file(file: UploadFile = File(...)):

@@ -11,7 +11,6 @@ from langchain.callbacks.base import AsyncCallbackHandler
 from langchain.schema import AgentAction, AgentFinish, LLMResult
 from tools import create_rag_tool, create_search_tool
 import os
-import json
 import asyncio
 
 
@@ -216,7 +215,7 @@ Thought: {agent_scratchpad}"""
         self,
         query: str,
         memory: Optional[ConversationBufferMemory] = None
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[Dict[str, Any]]:
         """
         流式对话接口
 
@@ -225,7 +224,7 @@ Thought: {agent_scratchpad}"""
             memory: 对话记忆实例
 
         Yields:
-            SSE 格式的流式响应
+            字典格式的流式响应（由调用方决定传输格式）
         """
         queue = asyncio.Queue()
         callback = StreamingCallbackHandler(queue)
@@ -257,7 +256,7 @@ Thought: {agent_scratchpad}"""
                 if item is None:
                     break
 
-                yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+                yield item
 
         finally:
             # 确保任务完成
