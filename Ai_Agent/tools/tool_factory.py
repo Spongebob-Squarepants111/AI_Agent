@@ -1,7 +1,6 @@
 """LangChain 工具封装 - 将工具封装为 LangChain Tool 对象"""
 from langchain.tools import Tool
 from typing import Optional
-from .rag_tool import RAGTool
 from .search import SearchTool
 
 
@@ -18,7 +17,26 @@ def create_rag_tool(rag_retriever) -> Optional[Tool]:
     if not rag_retriever:
         return None
 
-    rag_tool = RAGTool(rag_retriever)
+    def search_knowledge(query: str) -> str:
+        """从知识库中搜索相关信息"""
+        try:
+            # 检查知识库是否有文档
+            info = rag_retriever.get_collection_info()
+            vectors_count = info.get("vectors_count", 0)
+
+            if vectors_count == 0:
+                return "知识库为空，没有可搜索的文档。"
+
+            # 搜索相关文档
+            context = rag_retriever.get_context(query, k=3)
+
+            if not context:
+                return "未找到相关文档。"
+
+            return context
+
+        except Exception as e:
+            return f"搜索知识库时出错: {str(e)}"
 
     return Tool(
         name="knowledge_search",
@@ -27,7 +45,7 @@ def create_rag_tool(rag_retriever) -> Optional[Tool]:
             "当用户询问关于已上传文档的问题时使用此工具。"
             "输入应该是一个搜索查询字符串。"
         ),
-        func=rag_tool.search_knowledge
+        func=search_knowledge
     )
 
 

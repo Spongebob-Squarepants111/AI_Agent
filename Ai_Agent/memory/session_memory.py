@@ -4,7 +4,6 @@ import json
 import os
 from typing import List, Dict
 from datetime import datetime
-from langchain_core.messages import HumanMessage, SystemMessage
 
 
 class ChatMemory:
@@ -50,28 +49,6 @@ class ChatMemory:
         """
         messages = self.redis_client.lrange(self.key, 0, -1)
         return [json.loads(msg) for msg in reversed(messages)]
-
-    def get_history_messages(self) -> List:
-        """
-        获取格式化的历史消息列表（用于 LangChain）
-
-        Returns:
-            LangChain 消息对象列表
-        """
-        history = self.get_history()
-        messages = []
-
-        for msg in history:
-            if msg["role"] == "user":
-                messages.append(HumanMessage(content=msg["content"]))
-            elif msg["role"] == "assistant":
-                messages.append(SystemMessage(content=msg["content"]))
-
-        return messages
-
-    def clear(self):
-        """清空历史记录"""
-        self.redis_client.delete(self.key)
 
 
 def create_session_memory(session_id: str) -> ChatMemory:

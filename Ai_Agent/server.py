@@ -9,7 +9,7 @@ import tempfile
 import shutil
 from typing import Optional
 from datetime import datetime
-from rag import RAGRetriever
+from tools.rag import RAGRetriever
 from tools import SearchTool
 from agent import LangChainAgent
 from memory import create_session_memory, create_langchain_memory, save_conversation_to_redis
